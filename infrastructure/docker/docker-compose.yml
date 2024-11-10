@@ -1,0 +1,30 @@
+# infrastructure/docker/docker-compose.yml
+version: '3.8'
+
+services:
+  crawler:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile
+    env_file:
+      - ../../.env
+    volumes:
+      - ../../src:/app/src
+      - ../../config:/app/config
+    environment:
+      - UV_COMPILE_BYTECODE=1
+      - UV_LINK_MODE=copy
+      - PLAYWRIGHT_BROWSERS_PATH=/playwright-browsers
+    command: ["uv", "run", "scrapy", "crawl", "frontier_spider"]
+    x-develop:
+      watch:
+        - action: sync
+          path: ../../src
+          target: /app/src
+          ignore:
+            - .venv/ 
+        - action: sync
+          path: ../../config
+          target: /app/config
+        - action: rebuild
+          path: ../../pyproject.toml
