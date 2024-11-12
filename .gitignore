@@ -1,5 +1,7 @@
 project_docs.py
 project_documentation.md
+
+*.ipynb
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
