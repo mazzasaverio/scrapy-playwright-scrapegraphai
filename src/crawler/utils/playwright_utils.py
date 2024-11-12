@@ -10,7 +10,7 @@ class PlaywrightPageManager:
     
     def __init__(self, page: Page):
         self.page = page
-        self.logger = logfire.logger
+        self.logger = logfire
     
     @staticmethod
     def get_default_page_methods():

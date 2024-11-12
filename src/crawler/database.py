@@ -1,4 +1,5 @@
 # src/crawler/database.py
+
 import os
 import asyncio
 import asyncpg
@@ -7,9 +8,9 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any
 import logfire
 from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
+from twisted.internet import defer, threads, reactor
+from twisted.python.threadpool import ThreadPool
+from functools import partial
 
 class DatabaseManager:
     def __init__(self):
@@ -22,108 +23,125 @@ class DatabaseManager:
             'database': os.getenv('POSTGRES_DATABASE', 'postgres')
         }
         
-        # Load SQL queries using aiosql
+        # Load SQL queries
         queries_path = os.path.join(os.path.dirname(__file__), 'sql')
         self.queries = aiosql.from_path(queries_path, "asyncpg")
         logfire.info("SQL queries loaded successfully")
+        
+        # Create a thread pool for database operations
+        self.threadpool = ThreadPool(minthreads=1, maxthreads=10)
+        self.threadpool.start()
+        reactor.addSystemEventTrigger('before', 'shutdown', self.threadpool.stop)
 
-    async def initialize(self) -> None:
-        """Initialize database pool and create tables if they don't exist"""
+    async def _init_pool(self):
+        """Initialize the connection pool"""
+        try:
+            self.pool = await asyncpg.create_pool(**self._connection_params)
+            return self.pool
+        except Exception as e:
+            logfire.error(f"Failed to create connection pool: {e}")
+            raise
+
+    @defer.inlineCallbacks
+    def initialize(self):
+        """Initialize database connection"""
         if not self.pool:
             try:
-                self.pool = await asyncpg.create_pool(**self._connection_params)
+                # Create a new event loop for this thread
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                # Initialize pool
+                self.pool = yield threads.deferToThread(
+                    lambda: loop.run_until_complete(self._init_pool())
+                )
+                
                 logfire.info("Database pool created successfully")
                 
-                # Execute schema creation
-                async with self.pool.acquire() as conn:
-                    await self.queries.create_schema(conn)
+                # Initialize schema
+                yield threads.deferToThread(
+                    lambda: loop.run_until_complete(self._execute_schema_creation())
+                )
+                
                 logfire.info("Database schema initialized successfully")
                 
             except Exception as e:
                 logfire.error(f"Failed to initialize database: {e}")
                 raise
+            finally:
+                loop.close()
 
-    async def store_frontier_url(self, url: str, category: str, type_: int, 
-                               depth: int = 0, is_target: bool = False) -> str:
+    async def _execute_schema_creation(self):
+        """Execute schema creation"""
+        if not self.pool:
+            raise RuntimeError("Database pool not initialized")
+            
+        async with self.pool.acquire() as conn:
+            await self.queries.create_schema(conn)
+
+    @defer.inlineCallbacks
+    def store_frontier_url(self, url: str, category: str, type_: int,
+                          depth: int = 0, is_target: bool = False):
         """Store a new URL in the frontier"""
-        if not self.pool:
-            raise RuntimeError("Database not initialized")
-        
-        try:
-            async with self.pool.acquire() as conn:
-                url_id = await self.queries.insert_frontier_url(
-                    conn,
-                    url=url,
-                    category=category,
-                    type_=type_,
-                    depth=depth,
-                    is_target=is_target
-                )
-                if url_id:
-                    logfire.info(f"Stored new frontier URL: {url}")
-                else:
-                    logfire.info(f"URL already exists in frontier: {url}")
-                return url_id
-        except Exception as e:
-            logfire.error(f"Failed to store frontier URL {url}: {e}")
-            raise
-
-    async def update_config_url_log(self, url: str, category: str, type_: int, 
-                                  success: bool = True, status: str = "completed") -> None:
-        """Update or create config URL log entry"""
-        if not self.pool:
-            raise RuntimeError("Database not initialized")
-        
-        try:
-            async with self.pool.acquire() as conn:
-                await self.queries.update_config_url_log(
-                    conn,
-                    url=url,
-                    category=category,
-                    type_=type_,
-                    success=success,
-                    status=status
-                )
-                logfire.info(f"Updated config URL log: {url}")
-        except Exception as e:
-            logfire.error(f"Failed to update config URL log {url}: {e}")
-            raise
-
-    async def get_unprocessed_frontier_urls(self, limit: int = 10) -> List[Dict[str, Any]]:
-        """Get unprocessed URLs from frontier"""
-        if not self.pool:
-            raise RuntimeError("Database not initialized")
-        
-        try:
-            async with self.pool.acquire() as conn:
-                rows = await self.queries.get_unprocessed_urls(conn, limit=limit)
-                return [dict(row) for row in rows]
-        except Exception as e:
-            logfire.error(f"Failed to get unprocessed URLs: {e}")
-            raise
-
-    async def mark_url_processed(self, url_id: str, success: bool = True, 
-                               error_message: str = None) -> None:
-        """Mark a URL as processed in the frontier"""
         if not self.pool:
             raise RuntimeError("Database not initialized")
             
         try:
-            async with self.pool.acquire() as conn:
-                await self.queries.mark_url_processed(
-                    conn,
-                    url_id=url_id,
-                    success=success,
-                    error_message=error_message
+            # Create a new event loop for this operation
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            result = yield threads.deferToThread(
+                lambda: loop.run_until_complete(
+                    self._store_frontier_url_async(url, category, type_, depth, is_target)
                 )
-                logfire.info(f"Marked URL {url_id} as processed")
+            )
+            return result
+            
         except Exception as e:
-            logfire.error(f"Failed to mark URL {url_id} as processed: {e}")
+            logfire.error(f"Failed to store frontier URL {url}: {e}")
             raise
-    async def close(self) -> None:
-        """Close the database pool"""
+        finally:
+            loop.close()
+
+    async def _store_frontier_url_async(self, url: str, category: str, type_: int,
+                                      depth: int = 0, is_target: bool = False):
+        """Async implementation of URL storage"""
+        async with self.pool.acquire() as conn:
+            url_id = await self.queries.insert_frontier_url(
+                conn,
+                url=url,
+                category=category,
+                type_=type_,
+                depth=depth,
+                is_target=is_target
+            )
+            if url_id:
+                logfire.info(f"Stored new frontier URL: {url}")
+            else:
+                logfire.info(f"URL already exists in frontier: {url}")
+            return url_id
+
+    @defer.inlineCallbacks
+    def close(self):
+        """Close database pool"""
         if self.pool:
-            await self.pool.close()
-            logfire.info("Database pool closed")
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                yield threads.deferToThread(
+                    lambda: loop.run_until_complete(self.pool.close())
+                )
+                
+                logfire.info("Database pool closed")
+                
+            except Exception as e:
+                logfire.error(f"Error closing database pool: {e}")
+                raise
+            finally:
+                loop.close()
+                self.threadpool.stop()
+
 # Singleton instance
 db_manager = DatabaseManager()

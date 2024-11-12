@@ -1,0 +1,21 @@
+
+
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Crawler",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/run_spider.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src",
+                "PYTHONUNBUFFERED": "1",
+                "PLAYWRIGHT_BROWSERS_PATH": "${workspaceFolder}/.playwright-browsers"
+            },
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

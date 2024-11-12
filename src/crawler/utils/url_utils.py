@@ -1,4 +1,3 @@
-# src/crawler/utils/url.py
 
 import re
 from typing import List, Optional

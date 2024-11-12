@@ -1,32 +1,29 @@
-# Define your item pipelines here
-#
-# Don't forget to add your pipeline to the ITEM_PIPELINES setting
-# See: https://docs.scrapy.org/en/latest/topics/item-pipeline.html
-
-
-# useful for handling different item types with a single interface
-from itemadapter import ItemAdapter
-
-
-class CrawlerPipeline:
-    def process_item(self, item, spider):
-        return item
-
-
 # src/crawler/pipelines.py
 
-import asyncio
 from typing import Dict, Any
 import logfire
 from crawler.database import db_manager
+from twisted.internet import defer
 
 class DatabasePipeline:
     """Pipeline for storing URLs in the database"""
     
-    async def process_item(self, item: Dict[str, Any], spider) -> Dict[str, Any]:
+    def __init__(self):
+        self.db_initialized = False
+    
+    @defer.inlineCallbacks
+    def open_spider(self, spider):
+        """Initialize database connection"""
+        if not self.db_initialized:
+            yield db_manager.initialize()
+            self.db_initialized = True
+            logfire.info("Database pipeline initialized")
+    
+    @defer.inlineCallbacks
+    def process_item(self, item: Dict[str, Any], spider) -> Dict[str, Any]:
         """Store URL in frontier database"""
         try:
-            url_id = await db_manager.store_frontier_url(
+            url_id = yield db_manager.store_frontier_url(
                 url=item["url"],
                 category=item["category"],
                 type_=item["type"],
@@ -51,11 +48,10 @@ class DatabasePipeline:
                 error=str(e)
             )
             raise
-            
-    async def open_spider(self, spider):
-        """Initialize database connection"""
-        await db_manager.initialize()
-        
-    async def close_spider(self, spider):
+    
+    @defer.inlineCallbacks
+    def close_spider(self, spider):
         """Close database connection"""
-        await db_manager.close()
+        if self.db_initialized:
+            yield db_manager.close()
+            logfire.info("Database pipeline closed")
