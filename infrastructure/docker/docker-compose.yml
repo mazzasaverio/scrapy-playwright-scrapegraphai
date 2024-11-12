@@ -9,22 +9,36 @@ services:
     env_file:
       - ../../.env
     volumes:
-      - ../../src:/app/src
-      - ../../config:/app/config
+      - ../../src:/app/src:ro
+      - ../../config:/app/config:ro
+
+      - playwright-cache:/playwright-browsers
+
     environment:
+      - PYTHONPATH=/app/src
       - UV_COMPILE_BYTECODE=1
       - UV_LINK_MODE=copy
       - PLAYWRIGHT_BROWSERS_PATH=/playwright-browsers
+      - PYTHONUNBUFFERED=1
+    working_dir: /app
     command: ["uv", "run", "scrapy", "crawl", "frontier_spider"]
-    x-develop:
+
+    develop:
       watch:
-        - action: sync
+        - action: sync+restart
           path: ../../src
           target: /app/src
           ignore:
-            - .venv/ 
-        - action: sync
+            - "**/__pycache__"
+            - "**/*.pyc"
+        - action: sync+restart
           path: ../../config
           target: /app/config
+          ignore:
+            - "**/__pycache__"
+            - "**/*.pyc"
         - action: rebuild
-          path: ../../pyproject.toml
+          path: pyproject.toml
+
+volumes:
+  playwright-cache:

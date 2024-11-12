@@ -92,21 +92,20 @@ REQUEST_FINGERPRINTER_IMPLEMENTATION = "2.7"
 TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
 FEED_EXPORT_ENCODING = "utf-8"
 
-from typing import TypedDict
+# Disabilita completamente i log di Scrapy
+LOG_ENABLED = False
 
-class DBConfig(TypedDict):
-    host: str
-    port: int 
-    user: str
-    password: str
-    database: str
+# Se vuoi mantenere alcuni log di Scrapy ma con livello più alto
+# LOG_LEVEL = 'ERROR'  # Solo errori
+# LOG_LEVEL = 'CRITICAL'  # Solo errori critici
 
-def get_db_config() -> DBConfig:
-    """Get database configuration for development environment"""
-    return {
-        'host': 'localhost',
-        'port': 5432,
-        'user': 'crawler',
-        'password': 'crawler123', 
-        'database': 'crawler_db'
-    }
+# Disabilita la console di Telnet
+TELNETCONSOLE_ENABLED = False
+
+# Altre impostazioni base di Scrapy che vuoi mantenere
+ROBOTSTXT_OBEY = True
+
+# Settings per le richieste
+REQUEST_FINGERPRINTER_IMPLEMENTATION = "2.7"
+TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
+FEED_EXPORT_ENCODING = "utf-8"
