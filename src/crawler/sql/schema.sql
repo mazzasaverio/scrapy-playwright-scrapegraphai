@@ -86,8 +86,13 @@ CREATE INDEX IF NOT EXISTS idx_config_url_log_category ON config_url_log(categor
 CREATE INDEX IF NOT EXISTS idx_config_url_log_state ON config_url_log(config_state);
 CREATE INDEX IF NOT EXISTS idx_config_url_log_type ON config_url_log(url_type);
 CREATE INDEX IF NOT EXISTS idx_config_url_log_updated ON config_url_log(updated_at);
--- Create function to automatically update last_update
+-- Create function to automatically update last_update column for frontier_url
 CREATE OR REPLACE FUNCTION update_last_update_column() RETURNS TRIGGER AS $$ BEGIN NEW.last_update = CURRENT_TIMESTAMP;
+RETURN NEW;
+END;
+$$ LANGUAGE 'plpgsql';
+-- Create function to automatically update updated_at column for config_url_log
+CREATE OR REPLACE FUNCTION update_updated_at_column() RETURNS TRIGGER AS $$ BEGIN NEW.updated_at = CURRENT_TIMESTAMP;
 RETURN NEW;
 END;
 $$ LANGUAGE 'plpgsql';
@@ -98,7 +103,7 @@ UPDATE ON frontier_url FOR EACH ROW EXECUTE FUNCTION update_last_update_column()
 -- Add trigger to config_url_log
 DROP TRIGGER IF EXISTS update_config_url_log_updated_at ON config_url_log;
 CREATE TRIGGER update_config_url_log_updated_at BEFORE
-UPDATE ON config_url_log FOR EACH ROW EXECUTE FUNCTION update_last_update_column();
+UPDATE ON config_url_log FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 -- Add comments
 COMMENT ON TABLE frontier_url IS 'Stores URLs to be crawled and their metadata';
 COMMENT ON TABLE config_url_log IS 'Logs configuration and results of URL processing';

@@ -1,5 +1,5 @@
 # infrastructure/docker/docker-compose.yml
-version: '3.8'
+version: "3.8"
 
 services:
   crawler:
@@ -9,17 +9,18 @@ services:
     env_file:
       - ../../.env
     volumes:
-      - ../../src:/app/src:ro
-      - ../../config:/app/config:ro
-
-      - playwright-cache:/playwright-browsers
-
+      - ../../src:/home/playwright/app/src:ro
+      - ../../config:/home/playwright/app/config:ro
+      - playwright-cache:/home/playwright/.cache/ms-playwright
     environment:
-      - PYTHONPATH=/app/src
-      - UV_COMPILE_BYTECODE=1
-      - UV_LINK_MODE=copy
-      - PLAYWRIGHT_BROWSERS_PATH=/playwright-browsers
-      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/home/playwright/app/src
+      - PLAYWRIGHT_BROWSERS_PATH=/home/playwright/.cache/ms-playwright
+      - PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+      - DISPLAY=:99
+    security_opt:
+      - seccomp=unconfined
+    cap_add:
+      - SYS_ADMIN
     working_dir: /app
     command: ["uv", "run", "scrapy", "crawl", "frontier_spider"]
 

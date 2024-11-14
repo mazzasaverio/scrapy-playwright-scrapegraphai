@@ -1,3 +1,32 @@
+-- name: upsert_config_log^
+INSERT INTO config_url_log (
+        url,
+        category,
+        url_type,
+        config_state,
+        max_depth,
+        target_patterns,
+        seed_pattern,
+        start_time
+    )
+VALUES (
+        :url,
+        :category,
+        :url_type,
+        :config_state,
+        :max_depth,
+        :target_patterns,
+        :seed_pattern,
+        :start_time
+    ) ON CONFLICT (url, category) DO
+UPDATE
+SET config_state = EXCLUDED.config_state,
+    max_depth = EXCLUDED.max_depth,
+    target_patterns = EXCLUDED.target_patterns,
+    seed_pattern = EXCLUDED.seed_pattern,
+    start_time = EXCLUDED.start_time,
+    updated_at = CURRENT_TIMESTAMP
+RETURNING id;
 -- name: insert_frontier_url^
 INSERT INTO frontier_url (
         url,

@@ -31,7 +31,12 @@ ENV PATH="/app/.venv/bin:$PATH"
 # Reset the entrypoint, don't invoke `uv`
 ENTRYPOINT []
 
+RUN uv venv /opt/venv
+# Use the virtual environment automatically
+ENV VIRTUAL_ENV=/opt/venv
+
 ENV PLAYWRIGHT_BROWSERS_PATH=/playwright-browsers
+
 
 RUN playwright install --with-deps chromium \
     && chmod -Rf 777 $PLAYWRIGHT_BROWSERS_PATH

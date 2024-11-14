@@ -21,27 +21,30 @@ class PlaywrightPageManager:
             PageMethod("wait_for_timeout", 5000),  # Increased timeout
         ]
 
+    # src/crawler/utils/playwright_utils.py
+
     async def _wait_for_page_ready(self):
         """Enhanced page ready check with detailed logging"""
         try:
-
+            logfire.info("Waiting for page to be ready", url=self.page.url)
+            
             # Wait for DOM content
             await self.page.wait_for_load_state('domcontentloaded')
-          
+            logfire.debug("DOM content loaded", url=self.page.url)
             
-            # Wait for network to be idle
-            await self.page.wait_for_load_state('networkidle', timeout=10000)
-          
+            # Wait for network idle
+            await self.page.wait_for_load_state('networkidle', timeout=30000)
+            logfire.debug("Network idle", url=self.page.url)
             
             # Additional wait for dynamic content
-            await self.page.wait_for_timeout(3000)
+            await self.page.wait_for_timeout(5000)
+            logfire.debug("Additional wait completed", url=self.page.url)
             
         except Exception as e:
             logfire.error(
                 "Error during page ready check",
                 url=self.page.url,
                 error=str(e),
-                error_type=type(e).__name__,
                 traceback=traceback.format_exc()
             )
             raise

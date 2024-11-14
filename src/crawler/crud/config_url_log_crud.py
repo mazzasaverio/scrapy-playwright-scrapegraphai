@@ -13,8 +13,8 @@ class ConfigUrlLogCRUD(BaseCRUD):
         super().__init__(conn, queries)
         self.table = "config_url_log"
 
-    def create_log(self, log: ConfigUrlLog) -> int:
-        """Create a new config URL log entry"""
+    def create_log(self, log: ConfigUrlLog) -> Optional[int]:
+        """Create or update a config URL log entry"""
         try:
             # Convert model to dict for query params
             data = {
@@ -25,29 +25,28 @@ class ConfigUrlLogCRUD(BaseCRUD):
                 'max_depth': log.max_depth,
                 'target_patterns': log.target_patterns,
                 'seed_pattern': log.seed_pattern,
-                'start_time': log.start_time or datetime.now()
+                'start_time': datetime.now()
             }
 
-            # Execute insert query with ON CONFLICT DO NOTHING
-            result = self.queries.insert_config_log(self.conn, **data)
-            # Adjust how you extract the id
-            log_id = result[0] if result else None
-
-            logfire.debug(
-                "Created ConfigUrlLog entry",
-                url=str(log.url),
-                log_id=log_id
-            )
-
-            return log_id
+            result = self.queries.upsert_config_log(self.conn, **data)
+            
+            if result:
+                if isinstance(result, dict):
+                    return result['id']
+                elif isinstance(result, tuple):
+                    return result[0]  
+                return result  # If result is just an int
+                
+            return None
 
         except Exception as e:
             logfire.error(
-                "Error creating ConfigUrlLog entry",
+                "Error creating/updating ConfigUrlLog entry",
                 url=str(log.url),
                 error=str(e)
             )
             raise
+
 
 
     def update_state(

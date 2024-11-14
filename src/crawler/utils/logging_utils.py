@@ -53,13 +53,13 @@ def setup_logging():
     handler = logfire.LogfireLoggingHandler()
     formatter = logging.Formatter('%(asctime)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     handler.setFormatter(formatter)
-    
+
     # Configura il logging di base
     logging.basicConfig(
         handlers=[handler],
         format='%(asctime)s %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S',
-        level=logging.WARNING  # Importante: metti WARNING qui per sopprimere i log di sistema
+        level=logging.DEBUG  # Set to DEBUG to capture all logs
     )
 
 # Esporta logfire per l'uso in altri moduli

@@ -9,7 +9,7 @@ BOT_NAME = "crawler"
 SPIDER_MODULES = ["crawler.spiders"]
 NEWSPIDER_MODULE = "crawler.spiders"
 
-# Reactor and Handlers Configuration
+
 TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
 DOWNLOAD_HANDLERS = {
     "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
@@ -49,7 +49,10 @@ DEFAULT_REQUEST_HEADERS = {
 ROBOTSTXT_OBEY = False
 COOKIES_ENABLED = True
 TELNETCONSOLE_ENABLED = False
-LOG_ENABLED = False
+# src/crawler/settings.py
+
+LOG_ENABLED = True
+LOG_LEVEL = 'DEBUG'
 
 # Export Settings
 REQUEST_FINGERPRINTER_IMPLEMENTATION = "2.7"

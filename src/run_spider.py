@@ -34,13 +34,20 @@ def main():
         # Install asyncio reactor
         install_reactor('twisted.internet.asyncioreactor.AsyncioSelectorReactor')
         
+        # Import modules that depend on the reactor after it's installed
+        from crawler.utils.logging_utils import setup_logging
+        setup_logging()
+        from crawler.database import db_manager
+        
+        # Initialize database
+        db_manager.initialize()
+        
         # Configure logging
         configure_logging()
         
         # Get settings
         settings = get_project_settings()
         
-
         # Create process
         process = CrawlerProcess(settings)
         
@@ -55,6 +62,8 @@ def main():
     except Exception as e:
         logfire.error(f"Failed to run crawler: {e}")
         raise
+
+
 
 if __name__ == "__main__":
     try:
