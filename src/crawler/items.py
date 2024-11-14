@@ -1,21 +1,29 @@
 # src/crawler/items.py
 
 import scrapy
-from typing import Optional
+from typing import Optional, List
 
 class UrlItem(scrapy.Item):
-    """Item representing a URL found during crawling"""
     url = scrapy.Field()
-    category = scrapy.Field()
+    category = scrapy.Field() 
     type = scrapy.Field()
     depth = scrapy.Field()
     is_target = scrapy.Field()
-    found_on = scrapy.Field()  # URL where this was found
+    parent_url = scrapy.Field()
+    target_patterns = scrapy.Field()
+    seed_pattern = scrapy.Field()
+    max_depth = scrapy.Field()
+    error = scrapy.Field()
+    
 
 class ConfigUrlLogItem(scrapy.Item):
-    """Item representing a log entry for config URLs"""
     url = scrapy.Field()
     category = scrapy.Field()
     type = scrapy.Field()
-    success = scrapy.Field()
     status = scrapy.Field()
+    max_depth = scrapy.Field()
+    target_patterns = scrapy.Field()
+    seed_pattern = scrapy.Field()
+    target_count = scrapy.Field()
+    seed_count = scrapy.Field()
+    error_message = scrapy.Field()

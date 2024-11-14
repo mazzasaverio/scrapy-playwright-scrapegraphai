@@ -1,5 +1,6 @@
 project_docs.py
 project_documentation.md
+crawler_config.yaml
 
 *.ipynb
 # Byte-compiled / optimized / DLL files

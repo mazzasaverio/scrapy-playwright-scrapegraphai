@@ -1,163 +1,237 @@
+import logfire
+import traceback
+from typing import List, Optional
+from playwright.async_api import Page
+from scrapy_playwright.page import PageMethod
+
+
 # src/crawler/utils/playwright_utils.py
 
-from playwright.async_api import Page
-import logfire
-from typing import List, Optional, Dict, Any
-import asyncio
-
 class PlaywrightPageManager:
-    """Manages common Playwright page operations and dynamic content handling"""
-    
-    def __init__(self, page: Page):
+    def __init__(self, page):
         self.page = page
-        self.logger = logfire
-    
+        logfire.info("PlaywrightPageManager initialized", page_url=page.url)
+
     @staticmethod
     def get_default_page_methods():
         """Returns default page methods for initial request"""
-        from scrapy_playwright.page import PageMethod
-        
+        logfire.info("Setting up default page methods")
         return [
             PageMethod("wait_for_load_state", "domcontentloaded"),
-            PageMethod("wait_for_load_state", "networkidle"),
-            PageMethod("evaluate", "window.scrollTo(0, document.body.scrollHeight)"),
-            PageMethod("wait_for_timeout", 1000),
+            PageMethod("wait_for_timeout", 5000),  # Increased timeout
         ]
-    
+
+    async def _wait_for_page_ready(self):
+        """Enhanced page ready check with detailed logging"""
+        try:
+
+            # Wait for DOM content
+            await self.page.wait_for_load_state('domcontentloaded')
+          
+            
+            # Wait for network to be idle
+            await self.page.wait_for_load_state('networkidle', timeout=10000)
+          
+            
+            # Additional wait for dynamic content
+            await self.page.wait_for_timeout(3000)
+            
+        except Exception as e:
+            logfire.error(
+                "Error during page ready check",
+                url=self.page.url,
+                error=str(e),
+                error_type=type(e).__name__,
+                traceback=traceback.format_exc()
+            )
+            raise
+
+    async def _handle_cookie_consent(self):
+        """Enhanced cookie consent handling with detailed logging"""
+        try:
+            await self.page.wait_for_timeout(2000)  # Wait for cookie banner to appear
+            
+            # Check for cookie banner
+            cookie_banner = await self.page.query_selector('#chefcookie-root')
+            
+            if not cookie_banner:
+                return
+                
+            # Try to click using JavaScript first
+            try:
+                await self.page.evaluate("""() => {
+                    const button = document.querySelector('[data-cc-accept-all]');
+                    if (button) button.click();
+                }""")
+                await self.page.wait_for_timeout(2000)
+                
+                # Check if banner is gone
+                banner_exists = await self.page.query_selector('#chefcookie-root')
+                if not banner_exists:
+                    return
+                else:
+                    logfire.info("Cookie banner still present after JavaScript click")
+            except Exception as e:
+                logfire.warning("JavaScript click failed", error=str(e))
+            
+            # UniBo specific selectors with detailed attributes
+            unibo_selectors = [
+                {
+                    'selector': '[data-cc-accept-all]',
+                    'description': 'Accept all button by data attribute'
+                },
+                {
+                    'selector': '.chefcookie__button--accept_all',
+                    'description': 'Accept all button by class'
+                },
+                {
+                    'selector': 'a[href="#chefcookie__accept_all"]',
+                    'description': 'Accept all link by href'
+                },
+                {
+                    'selector': 'button:has-text("Accetta tutti i cookie")',
+                    'description': 'Accept button by text'
+                },
+                {
+                    'selector': '.chefcookie__button-accept-all',
+                    'description': 'Accept button alternative class'
+                }
+            ]
+            
+            # Try each selector
+            for selector_info in unibo_selectors:
+                selector = selector_info['selector']
+                description = selector_info['description']
+                
+                try:
+                    logfire.info(f"Trying cookie selector: {description}", selector=selector)
+                    
+                    # Wait for element
+                    button = await self.page.wait_for_selector(
+                        selector,
+                        state="visible",
+                        timeout=5000
+                    )
+                    
+                    if button:
+                        logfire.info(f"Found cookie button", 
+                                   selector=selector, 
+                                   description=description)
+                        
+        
+                        # Try different click methods
+                        methods = [
+                            ('standard', lambda: button.click()),
+                            ('force', lambda: button.click(force=True)),
+                            ('js', lambda: self.page.evaluate(f'document.querySelector("{selector}").click()')),
+                            ('dispatch', lambda: self.page.evaluate(f'''
+                                document.querySelector("{selector}").dispatchEvent(
+                                    new MouseEvent('click', {{
+                                        bubbles: true,
+                                        cancelable: true,
+                                        view: window
+                                    }})
+                                )
+                            '''))
+                        ]
+                        
+                        for method_name, click_method in methods:
+                            try:
+                                await click_method()
+                                await self.page.wait_for_timeout(2000)
+                                
+                                banner_exists = await self.page.query_selector('#chefcookie-root')
+                                if not banner_exists:
+                                    logfire.info(f"Cookie banner removed via {method_name} click")
+                                    return
+                                else:
+                                    logfire.info(f"Cookie banner still present after {method_name} click")
+                            except Exception as e:
+                                logfire.warning(f"{method_name} click failed", error=str(e))
+                                continue
+                            
+                except Exception as e:
+                    logfire.debug(
+                        f"Failed with selector {selector}",
+                        error=str(e),
+                        error_type=type(e).__name__,
+                        traceback=traceback.format_exc()
+                    )
+                    continue
+            
+            logfire.warning("Failed to handle cookie consent with all selectors")
+            
+            # Take screenshot if all methods fail
+            try:
+                screenshot_path = "cookie_banner_failed.png"
+                await self.page.screenshot(path=screenshot_path)
+                logfire.info(f"Saved screenshot to {screenshot_path}")
+            except Exception as e:
+                logfire.error("Failed to save screenshot", error=str(e))
+            
+        except Exception as e:
+            logfire.error(
+                "Error handling cookie consent",
+                url=self.page.url,
+                error=str(e),
+                error_type=type(e).__name__,
+                traceback=traceback.format_exc()
+            )
+
     async def initialize_page(self):
         """Initialize page with common settings and handlers"""
-        await self.page.set_viewport_size({"width": 1920, "height": 1080})
-        await self._wait_for_page_ready()
-        await self._handle_dynamic_elements()
-    
-    async def _wait_for_page_ready(self):
-        """Wait for page to be completely loaded and stable."""
         try:
-            # Wait for basic load
-            await self.page.wait_for_load_state('domcontentloaded')
+            await self.page.set_viewport_size({"width": 1920, "height": 1080})
             
-            # Wait for network idle
-            await self.page.wait_for_load_state('networkidle')
+            # Wait for page ready
+            await self._wait_for_page_ready()
             
-            # Wait for full page load
-            await self.page.wait_for_load_state('load')
+            # Handle cookie consent
+            await self._handle_cookie_consent()
             
-            # Scroll for lazy content
+            # Handle dynamic elements
+            await self._handle_dynamic_elements()
+            
+        except Exception as e:
+            logfire.error(
+                "Failed to initialize page",
+                url=self.page.url,
+                error=str(e),
+                error_type=type(e).__name__,
+                traceback=traceback.format_exc()
+            )
+            raise
+
+    async def _handle_dynamic_elements(self):
+        """Handle dynamic page elements"""
+        try:
+
+            # Wait for any animations
+            await self.page.wait_for_timeout(1000)
+            
+            # Scroll to bottom and back
             await self.page.evaluate("""
                 window.scrollTo(0, document.body.scrollHeight);
                 window.scrollTo(0, 0);
             """)
             
-            # Short pause for JS reactions
-            await self.page.wait_for_timeout(1000)
+            # Wait for network idle
+            await self.page.wait_for_load_state('networkidle')
 
         except Exception as e:
-            self.logger.warning(
-                "Error waiting for page ready",
-                error=str(e)
+            logfire.warning(
+                "Error handling dynamic elements",
+                error=str(e),
+                traceback=traceback.format_exc()
             )
-
-    async def _handle_dynamic_elements(self):
-        """Handle common dynamic page elements like popups, cookies, and load more buttons."""
-        try:
-            # Handle cookie and privacy banners
-            await self._handle_cookie_banners()
-            
-            # Handle load more buttons
-            await self._handle_load_more_buttons()
-            
-            # Handle modals
-            await self._handle_modals()
-            
-        except Exception as e:
-            self.logger.warning(f"Error handling dynamic elements: {str(e)}")
-
-    async def _handle_cookie_banners(self):
-        """Handle common cookie consent banners"""
-        cookie_selectors = [
-            '[id*="cookie"]', 
-            '[id*="privacy"]',
-            '[id*="gdpr"]',
-            'button:has-text("Accetta")',
-            'button:has-text("Accept")',
-            'button[onclick*="cookiesPolicy"]'
-        ]
-        
-        for selector in cookie_selectors:
-            try:
-                button = await self.page.wait_for_selector(selector, timeout=2000)
-                if button:
-                    await button.click()
-                    self.logger.debug(f"Clicked cookie/privacy button: {selector}")
-                    await self.page.wait_for_timeout(1000)
-                    break
-            except:
-                continue
-
-    async def _handle_load_more_buttons(self, max_clicks: int = 5):
-        """Handle load more buttons with safety limits"""
-        load_more_selectors = [
-            'button:has-text("carica")', 
-            'button:has-text("load")',
-            'button:has-text("più")',
-            'button:has-text("more")',
-            '[class*="load-more"]',
-            'text="carica altri"'
-        ]
-        
-        clicks = 0
-        while clicks < max_clicks:
-            clicked = False
-            for selector in load_more_selectors:
-                try:
-                    button = await self.page.wait_for_selector(selector, timeout=2000)
-                    if button and await button.is_visible():
-                        await button.scroll_into_view_if_needed()
-                        await button.click()
-                        await self.page.wait_for_load_state('networkidle', timeout=5000)
-                        clicked = True
-                        clicks += 1
-                        self.logger.debug(f"Clicked load more button: {selector}")
-                        break
-                except:
-                    continue
-            if not clicked:
-                break
-
-    async def _handle_modals(self):
-        """Handle common modal dialogs"""
-        modal_close_selectors = [
-            '[class*="modal"] button[class*="close"]',
-            '[class*="modal"] button[class*="dismiss"]',
-            '[class*="dialog"] button[class*="close"]'
-        ]
-        
-        for selector in modal_close_selectors:
-            try:
-                button = await self.page.wait_for_selector(selector, timeout=1000)
-                if button and await button.is_visible():
-                    await button.click()
-                    self.logger.debug(f"Closed modal using selector: {selector}")
-            except:
-                continue
-    
-    async def extract_links(self, pattern: Optional[str] = None) -> List[str]:
-        """Extract all links from the current page, optionally filtered by pattern"""
-        links = await self.page.evaluate('''() => {
-            return Array.from(document.querySelectorAll('a'))
-                .map(a => a.href)
-                .filter(href => href && href.startsWith('http'));
-        }''')
-        
-        if pattern:
-            import re
-            links = [link for link in links if re.search(pattern, link)]
-            
-        return list(set(links))
 
     async def cleanup(self):
         """Cleanup resources"""
         try:
+           
             await self.page.close()
+           
         except Exception as e:
-            self.logger.error(f"Error during page cleanup: {str(e)}")
+            logfire.error("Error during cleanup", 
+                          error=str(e),
+                          traceback=traceback.format_exc())

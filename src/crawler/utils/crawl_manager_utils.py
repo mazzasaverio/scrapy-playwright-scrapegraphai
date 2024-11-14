@@ -15,25 +15,17 @@ class CrawlManager:
         self.max_depth = url_config.get('max_depth', 0)
         
     def process_url(self, url: str, found_links: List[str], current_depth: int = 0) -> List[UrlItem]:
-        """Process URL and extract items based on type"""
         items = []
-        
-        # Handle direct target URLs (Type 0)
         if self.type == 0:
+            # Type 0: Direct target URL
             items.append(self._create_target_item(url))
-            return items
-            
-        # Handle target page URLs (Type 1)
-        if self.type == 1:
+        elif self.type == 1:
+            # Type 1: Extract target URLs
             items.extend(self._process_target_links(found_links))
-            return items
-            
-        # Handle seed URLs with targets (Type 2)
-        if self.type == 2 and current_depth <= self.max_depth:
+        elif self.type == 2 and current_depth < self.max_depth:
+            # Type 2: Extract target and seed URLs
             items.extend(self._process_target_links(found_links))
             items.extend(self._process_seed_links(found_links, current_depth))
-            return items
-            
         return items
     
     def _create_target_item(self, url: str) -> UrlItem:

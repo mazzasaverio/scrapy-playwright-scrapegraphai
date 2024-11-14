@@ -8,14 +8,8 @@ import logfire
 def load_crawler_config() -> Dict[str, Any]:
     """Load crawler configuration from YAML file"""
     try:
-        # Get the current file's directory
         current_dir = Path(__file__).resolve().parent
-        
-        # Navigate to the config directory
         config_path = current_dir.parent.parent.parent / "config" / "crawler_config.yaml"
-        
-        # Debug log
-        logfire.info(f"Looking for config file at: {config_path}")
         
         if not config_path.exists():
             raise FileNotFoundError(f"Config file not found at: {config_path}")

@@ -1,147 +1,213 @@
-# src/crawler/database.py
-
 import os
-import asyncio
-import asyncpg
+import psycopg2
+from psycopg2 import pool, Error as PsycopgError
+from psycopg2.extras import execute_values
 import aiosql
-from datetime import datetime
-from typing import Optional, List, Dict, Any
 import logfire
+from pathlib import Path
+from typing import Optional, Dict, Any, List, Union
 from dotenv import load_dotenv
-from twisted.internet import defer, threads, reactor
-from twisted.python.threadpool import ThreadPool
-from functools import partial
 
 class DatabaseManager:
     def __init__(self):
-        self.pool: Optional[asyncpg.Pool] = None
+        self.pool = None
+        load_dotenv()
+        
         self._connection_params = {
             'host': os.getenv('POSTGRES_HOST', 'localhost'),
             'port': int(os.getenv('POSTGRES_PORT', 5432)),
             'user': os.getenv('POSTGRES_USER', 'postgres'),
             'password': os.getenv('POSTGRES_PASSWORD', ''),
-            'database': os.getenv('POSTGRES_DATABASE', 'postgres')
+            'database': os.getenv('POSTGRES_DATABASE', 'postgres'),
+            'sslmode': os.getenv('POSTGRES_SSLMODE', 'prefer')
         }
         
-        # Load SQL queries
-        queries_path = os.path.join(os.path.dirname(__file__), 'sql')
-        self.queries = aiosql.from_path(queries_path, "asyncpg")
-        logfire.info("SQL queries loaded successfully")
-        
-        # Create a thread pool for database operations
-        self.threadpool = ThreadPool(minthreads=1, maxthreads=10)
-        self.threadpool.start()
-        reactor.addSystemEventTrigger('before', 'shutdown', self.threadpool.stop)
+        # Load SQL files
+        self._load_sql_files()
 
-    async def _init_pool(self):
-        """Initialize the connection pool"""
+    def _load_sql_files(self):
+        """Load SQL schema and queries from files"""
         try:
-            self.pool = await asyncpg.create_pool(**self._connection_params)
-            return self.pool
+            sql_dir = Path(__file__).parent / 'sql'
+            
+            # Load schema
+            schema_file = sql_dir / 'schema.sql'
+            if not schema_file.exists():
+                raise FileNotFoundError(f"Schema file not found at: {schema_file}")
+            
+            with open(schema_file) as f:
+                self.schema_sql = f.read()
+            
+            # Load queries
+            queries_file = sql_dir / 'queries.sql'
+            if not queries_file.exists():
+                raise FileNotFoundError(f"Queries file not found at: {queries_file}")
+                
+            with open(queries_file) as f:
+                self.queries = aiosql.from_str(f.read(), "psycopg2")
+                
+            logfire.info("SQL files loaded successfully")
+            
         except Exception as e:
-            logfire.error(f"Failed to create connection pool: {e}")
+            logfire.error(f"Failed to load SQL files: {e}")
             raise
 
-    @defer.inlineCallbacks
     def initialize(self):
-        """Initialize database connection"""
-        if not self.pool:
-            try:
-                # Create a new event loop for this thread
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                
-                # Initialize pool
-                self.pool = yield threads.deferToThread(
-                    lambda: loop.run_until_complete(self._init_pool())
-                )
-                
-                logfire.info("Database pool created successfully")
-                
-                # Initialize schema
-                yield threads.deferToThread(
-                    lambda: loop.run_until_complete(self._execute_schema_creation())
-                )
-                
-                logfire.info("Database schema initialized successfully")
-                
-            except Exception as e:
-                logfire.error(f"Failed to initialize database: {e}")
-                raise
-            finally:
-                loop.close()
+        """Initialize database connection pool and schema"""
+        try:
+            # Create connection pool
+            self.pool = psycopg2.pool.SimpleConnectionPool(
+                minconn=1,
+                maxconn=10,
+                **self._connection_params
+            )
 
-    async def _execute_schema_creation(self):
-        """Execute schema creation"""
+            # **Set autocommit mode on all connections in the pool**
+            for conn in self.pool._pool:
+                conn.autocommit = True
+
+            # Create schema
+            self._execute_schema_creation()
+            logfire.info("Database initialized successfully")
+
+        except PsycopgError as e:
+            logfire.error(
+                "Database connection error",
+                error=str(e),
+                connection_params={
+                    k:v for k,v in self._connection_params.items() 
+                    if k != 'password'
+                }
+            )
+            raise
+        except Exception as e:
+            logfire.error(f"Failed to initialize database: {e}")
+            raise
+        
+    def _execute_schema_creation(self):
+        """Execute schema creation SQL with proper error handling"""
         if not self.pool:
             raise RuntimeError("Database pool not initialized")
             
-        async with self.pool.acquire() as conn:
-            await self.queries.create_schema(conn)
-
-    @defer.inlineCallbacks
-    def store_frontier_url(self, url: str, category: str, type_: int,
-                          depth: int = 0, is_target: bool = False):
-        """Store a new URL in the frontier"""
-        if not self.pool:
-            raise RuntimeError("Database not initialized")
-            
+        conn = self.pool.getconn()
         try:
-            # Create a new event loop for this operation
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            
-            result = yield threads.deferToThread(
-                lambda: loop.run_until_complete(
-                    self._store_frontier_url_async(url, category, type_, depth, is_target)
-                )
+            with conn.cursor() as cur:
+                # First drop existing types if they exist
+                cur.execute("""
+                    DROP TYPE IF EXISTS url_state_type CASCADE;
+                    DROP TYPE IF EXISTS config_state_type CASCADE;
+                """)
+                
+                # Create ENUMs and tables
+                cur.execute(self.schema_sql)
+                conn.commit()
+                logfire.info("Schema created successfully")
+                
+        except PsycopgError as e:
+            conn.rollback()
+            logfire.error(
+                "Schema creation failed",
+                error=str(e),
+                error_type=type(e).__name__
             )
-            return result
-            
-        except Exception as e:
-            logfire.error(f"Failed to store frontier URL {url}: {e}")
             raise
         finally:
-            loop.close()
-
-    async def _store_frontier_url_async(self, url: str, category: str, type_: int,
-                                      depth: int = 0, is_target: bool = False):
-        """Async implementation of URL storage"""
-        async with self.pool.acquire() as conn:
-            url_id = await self.queries.insert_frontier_url(
-                conn,
-                url=url,
-                category=category,
-                type_=type_,
-                depth=depth,
-                is_target=is_target
-            )
-            if url_id:
-                logfire.info(f"Stored new frontier URL: {url}")
-            else:
-                logfire.info(f"URL already exists in frontier: {url}")
-            return url_id
-
-    @defer.inlineCallbacks
-    def close(self):
-        """Close database pool"""
-        if self.pool:
-            try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
+            self.pool.putconn(conn)
+            
+    # Rest of the code remains the same
+            
+    def execute_query(
+        self, 
+        query: str, 
+        params: Optional[Union[tuple, dict]] = None, 
+        fetch: bool = False,
+        fetch_one: bool = False
+    ) -> Optional[List[tuple]]:
+        """Execute a SQL query with enhanced error handling"""
+        if not self.pool:
+            raise RuntimeError("Database pool not initialized")
+            
+        conn = self.pool.getconn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(query, params)
                 
-                yield threads.deferToThread(
-                    lambda: loop.run_until_complete(self.pool.close())
+                result = None
+                if fetch:
+                    if fetch_one:
+                        result = cur.fetchone()
+                    else:
+                        result = cur.fetchall()
+                    
+                conn.commit()
+                return result
+                
+        except PsycopgError as e:
+            conn.rollback()
+            logfire.error(
+                "Query execution failed",
+                query=query,
+                params=params,
+                error=str(e)
+            )
+            raise
+        finally:
+            self.pool.putconn(conn)
+            
+    def execute_batch(
+        self, 
+        query: str, 
+        params_list: List[Union[tuple, dict]], 
+        page_size: int = 1000
+    ) -> None:
+        """Execute batch operations with proper error handling"""
+        if not self.pool:
+            raise RuntimeError("Database pool not initialized")
+            
+        conn = self.pool.getconn()
+        try:
+            with conn.cursor() as cur:
+                execute_values(cur, query, params_list, page_size=page_size)
+                conn.commit()
+                logfire.info(
+                    "Batch execution completed",
+                    records_processed=len(params_list)
                 )
                 
-                logfire.info("Database pool closed")
-                
+        except PsycopgError as e:
+            conn.rollback()
+            logfire.error(
+                "Batch execution failed",
+                query=query,
+                batch_size=len(params_list),
+                error=str(e)
+            )
+            raise
+        finally:
+            self.pool.putconn(conn)
+    
+    def check_connection(self) -> bool:
+        """Test database connection"""
+        try:
+            conn = self.pool.getconn()
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+                return True
+        except Exception as e:
+            logfire.error("Connection test failed", error=str(e))
+            return False
+        finally:
+            if conn:
+                self.pool.putconn(conn)
+            
+    def close(self):
+        """Close database connections"""
+        if self.pool:
+            try:
+                self.pool.closeall()
+                logfire.info("Database connections closed")
             except Exception as e:
-                logfire.error(f"Error closing database pool: {e}")
-                raise
-            finally:
-                loop.close()
-                self.threadpool.stop()
+                logfire.error(f"Error closing database connections: {e}")
 
 # Singleton instance
 db_manager = DatabaseManager()
