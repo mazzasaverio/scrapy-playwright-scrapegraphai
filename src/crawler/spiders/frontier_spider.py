@@ -32,19 +32,26 @@ class FrontierSpider(scrapy.Spider):
             ],
         },
         "PLAYWRIGHT_BROWSER_TYPE": "chromium",
-  
     }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, url_seed_root_id=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.config = load_crawler_config()
+        self.url_seed_root_id = int(url_seed_root_id) if url_seed_root_id is not None else None
+        logfire.info(f"Initialized spider", url_seed_root_id=self.url_seed_root_id)
      
     def start_requests(self):
         """Generate initial requests from config"""
-
         try:
             for category in self.config.get('categories', []):
+                # Skip if url_seed_root_id doesn't match
+                if self.url_seed_root_id is not None and category.get('url_seed_root_id') != self.url_seed_root_id:
+                    continue
+
                 category_name = category['name']
+                logfire.info(f"Processing category", 
+                           category=category_name, 
+                           url_seed_root_id=category.get('url_seed_root_id'))
 
                 for url_config in category.get('urls', []):
                     url = url_config['url']
@@ -61,7 +68,7 @@ class FrontierSpider(scrapy.Spider):
                                 'url_config': url_config,
                                 'depth': 0
                             },
-                            dont_filter=True  # Important if you want to revisit URLs
+                            dont_filter=True
                         )
                     
                     elif url_type in (1, 2):
@@ -78,7 +85,7 @@ class FrontierSpider(scrapy.Spider):
                                 'url_config': url_config,
                                 'depth': 0
                             },
-                            dont_filter=True  # Important if you want to revisit URLs
+                            dont_filter=True
                         )
                     else:
                         logfire.warning(f"Unsupported URL type: {url_type}", url=url)
@@ -89,6 +96,7 @@ class FrontierSpider(scrapy.Spider):
                 error=str(e),
                 traceback=traceback.format_exc()
             )
+
 
     def parse_direct(self, response):
         """Parse direct requests (Type 0)"""

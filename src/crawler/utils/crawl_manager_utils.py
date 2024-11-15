@@ -45,6 +45,7 @@ class CrawlManager:
 
             logfire.info(
                 f"Processed URLs at depth {current_depth}",
+                url=url,
                 url_type=self.type,
                 target_count=target_count,
                 seed_count=seed_count
