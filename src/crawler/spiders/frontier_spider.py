@@ -1,7 +1,8 @@
-from urllib.parse import urljoin
-
+from datetime import datetime
+import os
+from urllib.parse import quote, unquote, urljoin
+import glob 
 from crawler.utils.url_utils import is_valid_url
-
 import scrapy
 import traceback
 import logfire
@@ -9,8 +10,10 @@ from crawler.utils.config_utils import load_crawler_config
 from crawler.utils.crawl_manager_utils import CrawlManager
 from crawler.items import ConfigUrlLogItem, UrlItem
 from crawler.utils.playwright_utils import PlaywrightPageManager
-from crawler.utils.logging_utils import setup_logging
+from crawler.utils.logging_utils import setup_logging, write_to_log
+
 setup_logging()
+
 class FrontierSpider(scrapy.Spider):
     name = "frontier_spider"
     
@@ -38,6 +41,7 @@ class FrontierSpider(scrapy.Spider):
         super().__init__(*args, **kwargs)
         self.config = load_crawler_config()
         self.url_seed_root_id = int(url_seed_root_id) if url_seed_root_id is not None else None
+        self.run_id = datetime.now().strftime('%Y%m%d_%H%M%S')  # Identificatore univoco per l'esecuzione
         logfire.info(f"Initialized spider", url_seed_root_id=self.url_seed_root_id)
      
     def start_requests(self):
@@ -58,7 +62,6 @@ class FrontierSpider(scrapy.Spider):
                     url_type = url_config['type']
                     
                     if url_type == 0:
-                        # Type 0: Direct target URL
                         yield scrapy.Request(
                             url=url,
                             callback=self.parse_direct,
@@ -72,7 +75,6 @@ class FrontierSpider(scrapy.Spider):
                         )
                     
                     elif url_type in (1, 2):
-                        # Type 1 and 2 require DOM manipulation, use Playwright
                         yield scrapy.Request(
                             url=url,
                             callback=self.parse_with_playwright,
@@ -97,14 +99,12 @@ class FrontierSpider(scrapy.Spider):
                 traceback=traceback.format_exc()
             )
 
-
     def parse_direct(self, response):
         """Parse direct requests (Type 0)"""
         category = response.meta.get('category')
         url_config = response.meta.get('url_config')
         url = response.url
 
-        # Mark URL as running
         yield ConfigUrlLogItem(
             url=url,
             category=category,
@@ -112,7 +112,6 @@ class FrontierSpider(scrapy.Spider):
             status='running'
         )
 
-        # Create UrlItem
         yield UrlItem(
             url=url,
             category=category,
@@ -124,7 +123,6 @@ class FrontierSpider(scrapy.Spider):
             seed_pattern=url_config.get('seed_pattern')
         )
 
-        # Update ConfigUrlLog to completed
         yield ConfigUrlLogItem(
             url=url,
             category=category,
@@ -143,7 +141,6 @@ class FrontierSpider(scrapy.Spider):
             traceback=failure.getTraceback().decode()
         )
         
-        # Update ConfigUrlLog with failure
         category = failure.request.meta.get('category')
         url_config = failure.request.meta.get('url_config')
         yield ConfigUrlLogItem(
@@ -168,10 +165,10 @@ class FrontierSpider(scrapy.Spider):
         
         target_count = 0
         seed_count = 0
+        target_urls = []
+        seed_urls = []
         
         try:
-           
-            # Create initial log entry
             if current_depth == 0:
                 yield ConfigUrlLogItem(
                     url=response.url,
@@ -183,30 +180,51 @@ class FrontierSpider(scrapy.Spider):
                     seed_pattern=url_config.get('seed_pattern')
                 )
 
-            # Initialize page manager and process page
             page_manager = PlaywrightPageManager(page)
             await page_manager.initialize_page()
             
-            content = await page.content()
             base_url = page.url
+
+            # Extract links from main page
+            anchors = await page.query_selector_all('a')
+            urls = [await anchor.get_attribute('href') for anchor in anchors]
+            found_links = [urljoin(base_url, u) for u in urls if u]
+
+            # Handle modal dialogs
+            buttons = await page.query_selector_all('button[data-bs-toggle="modal"]')
             
-            # Extract and process links
-            sel = scrapy.Selector(text=content, base_url=base_url)
-            found_links = sel.css('a::attr(href)').getall()
-            found_links = [urljoin(base_url, href) for href in found_links if href]
-            found_links = [link for link in found_links if is_valid_url(link)]
-            
-            logfire.debug(
-                "Found links",
-                url=response.url,
-                link_count=len(found_links)
-            )
+            for button in buttons:
+                try:
+                    await button.scroll_into_view_if_needed()
+                    await button.click(timeout=5000)
+                    await page.wait_for_selector('.modal.show', timeout=5000)
+                    
+                    modal_anchors = await page.query_selector_all('.modal.show a')
+                    modal_urls = [await anchor.get_attribute('href') for anchor in modal_anchors]
+                    found_links.extend([urljoin(base_url, u) for u in modal_urls if u])
+                    
+                    close_button = await page.query_selector('.modal.show button[data-bs-dismiss="modal"]')
+                    if close_button:
+                        await close_button.click()
+                    await page.wait_for_selector('.modal.show', state='hidden', timeout=5000)
+                except Exception as e:
+                    logfire.warning(f"Error processing modal: {e}")
+                    continue
+
+            # Modifica la sezione che crea la directory dei log e il nome del file
+            # Importa glob per contare i file esistenti
+
+            # Crea la directory dei log per la categoria
+            logs_dir = os.path.join('logs', category)
+            os.makedirs(logs_dir, exist_ok=True)
+
+            # Trova tutti i file di log esistenti per la data odierna
+            filename = os.path.join(logs_dir, f'found_links_{self.run_id}.txt')
+
 
             # Process links
             crawl_manager = CrawlManager(category, url_config)
-            items = crawl_manager.process_url(
-                response.url, found_links, current_depth
-            )
+            items = crawl_manager.process_url(response.url, found_links, current_depth)
             
             for item in items:
                 if isinstance(item, UrlItem):
@@ -215,32 +233,40 @@ class FrontierSpider(scrapy.Spider):
                     item['target_patterns'] = url_config.get('target_patterns')
                     item['seed_pattern'] = url_config.get('seed_pattern')
                     
-                    if item['is_target']:
-                        target_count += 1
-                    else:
-                        seed_count += 1
-                        
                     yield item
                     
-                    # Generate new requests for seed URLs
-                    if not item['is_target'] and current_depth + 1 <= url_config.get('max_depth', 0):
-                        yield scrapy.Request(
-                            url=item['url'],
-                            callback=self.parse_with_playwright,
-                            errback=self.errback_playwright,
-                            meta={
-                                'playwright': True,
-                                'playwright_include_page': True,
-                                'category': category,
-                                'url_config': url_config,
-                                'depth': current_depth + 1,
-                                'parent_url': response.url
-                            },
-                            dont_filter=True
-                        )
-        
+                    if item['is_target']:
+                        target_count += 1
+                        target_urls.append(item['url'])
+                    else:
+                        seed_count += 1
+                        seed_urls.append(item['url'])
+                        
+                        # Genera nuove richieste solo se la profondità corrente è minore della profondità massima
+                        if current_depth < url_config.get('max_depth', 0):
+                            yield scrapy.Request(
+                                url=item['url'],
+                                callback=self.parse_with_playwright,
+                                errback=self.errback_playwright,
+                                meta={
+                                    'playwright': True,
+                                    'playwright_include_page': True,
+                                    'category': category,
+                                    'url_config': url_config,
+                                    'depth': current_depth + 1,
+                                    'parent_url': response.url
+                                },
+                                dont_filter=True
+                            )
             
-            # Update final status
+            # Write results to log file
+            content = {
+                'found_links': found_links,
+                'target_urls': target_urls,
+                'seed_urls': seed_urls
+            }
+            write_to_log(filename, content, current_depth, response.url)
+    
             if current_depth == 0:
                 logfire.info(
                     "Completing config log",
@@ -293,7 +319,6 @@ class FrontierSpider(scrapy.Spider):
             traceback=failure.getTraceback().decode()
         )
         
-        # Try to close the page if it exists
         try:
             page = failure.request.meta.get('playwright_page')
             if page:
@@ -301,7 +326,6 @@ class FrontierSpider(scrapy.Spider):
         except Exception as e:
             logfire.error(f"Error closing page in errback: {str(e)}")
         
-        # Update ConfigUrlLog with failure if at depth 0
         if failure.request.meta.get('depth', 0) == 0:
             category = failure.request.meta.get('category')
             url_config = failure.request.meta.get('url_config')

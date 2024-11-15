@@ -7,16 +7,18 @@ categories:
         type: 1
         target_patterns:
           - ".*\\.pdf$"
-        seed_pattern: null # Type 1 non richiede seed_pattern
+          - ".*\\.pdf[^a-zA-Z].*"
+          - ".*download.*pdf.*"
+        seed_pattern: null
         max_depth: 0
 
   - url_seed_root_id: 1
     name: "Bologna"
     description: "Borse di studio e premi di laurea UniBo"
     urls:
-      - url: "https://bandi.unibo.it/agevolazioni/borse?b_start:int=20"
+      - url: "https://bandi.unibo.it/agevolazioni/borse?b_start:int=0"
         type: 2
         target_patterns:
-          - ".*\\.pdf$"
-        seed_pattern: ".*/agevolazioni/borse/.*" # Aggiunto un pattern esempio per Type 2
+          - ".pdf"
+        seed_pattern: "/s/abis1/" # Pattern più preciso
         max_depth: 1

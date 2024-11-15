@@ -88,3 +88,35 @@ def setup_logging():
 
 # Export logfire for use in other modules
 logger = logfire
+
+
+def write_to_log(filename: str, content: dict, current_depth: int, page_url: str):
+    """Write crawling results to log file
+    
+    Args:
+        filename: Log file path
+        content: Dict containing found_links, target_urls and seed_urls
+        current_depth: Current crawling depth
+        page_url: URL of current page
+    """
+    with open(filename, "a", encoding="utf-8") as f:
+        f.write(f"\n\n{'='*50}\n")
+        f.write(f"DEPTH {current_depth} - PAGE: {page_url}\n")
+        f.write(f"{'='*50}\n\n")
+        
+        f.write("ALL FOUND LINKS:\n")
+        f.write("-" * 20 + "\n")
+        for i, link in enumerate(content['found_links'], 1):
+            f.write(f"{i}. {link}\n")
+
+        f.write(f"\nTARGET URLS FOUND ({len(content['target_urls'])}):\n")
+        f.write("-" * 20 + "\n")
+        for i, url in enumerate(content['target_urls'], 1):
+            f.write(f"{i}. {url}\n")
+            
+        f.write(f"\nSEED URLS FOUND ({len(content['seed_urls'])}):\n")
+        f.write("-" * 20 + "\n")
+        for i, url in enumerate(content['seed_urls'], 1):
+            f.write(f"{i}. {url}\n")
+        
+        f.write("\n" + "="*50 + "\n")
