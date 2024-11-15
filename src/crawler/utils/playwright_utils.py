@@ -10,12 +10,10 @@ from scrapy_playwright.page import PageMethod
 class PlaywrightPageManager:
     def __init__(self, page):
         self.page = page
-        logfire.info("PlaywrightPageManager initialized", page_url=page.url)
 
     @staticmethod
     def get_default_page_methods():
         """Returns default page methods for initial request"""
-        logfire.info("Setting up default page methods")
         return [
             PageMethod("wait_for_load_state", "domcontentloaded"),
             PageMethod("wait_for_timeout", 5000),  # Increased timeout
@@ -26,7 +24,7 @@ class PlaywrightPageManager:
     async def _wait_for_page_ready(self):
         """Enhanced page ready check with detailed logging"""
         try:
-            logfire.info("Waiting for page to be ready", url=self.page.url)
+            logfire.debug("Waiting for page to be ready", url=self.page.url)
             
             # Wait for DOM content
             await self.page.wait_for_load_state('domcontentloaded')
@@ -73,7 +71,7 @@ class PlaywrightPageManager:
                 if not banner_exists:
                     return
                 else:
-                    logfire.info("Cookie banner still present after JavaScript click")
+                    logfire.debug("Cookie banner still present after JavaScript click")
             except Exception as e:
                 logfire.warning("JavaScript click failed", error=str(e))
             
@@ -107,7 +105,7 @@ class PlaywrightPageManager:
                 description = selector_info['description']
                 
                 try:
-                    logfire.info(f"Trying cookie selector: {description}", selector=selector)
+                    logfire.debug(f"Trying cookie selector: {description}", selector=selector)
                     
                     # Wait for element
                     button = await self.page.wait_for_selector(
@@ -117,7 +115,7 @@ class PlaywrightPageManager:
                     )
                     
                     if button:
-                        logfire.info(f"Found cookie button", 
+                        logfire.debug(f"Found cookie button", 
                                    selector=selector, 
                                    description=description)
                         
@@ -145,10 +143,10 @@ class PlaywrightPageManager:
                                 
                                 banner_exists = await self.page.query_selector('#chefcookie-root')
                                 if not banner_exists:
-                                    logfire.info(f"Cookie banner removed via {method_name} click")
+                                  
                                     return
                                 else:
-                                    logfire.info(f"Cookie banner still present after {method_name} click")
+                                    logfire.debug(f"Cookie banner still present after {method_name} click")
                             except Exception as e:
                                 logfire.warning(f"{method_name} click failed", error=str(e))
                                 continue
@@ -162,13 +160,13 @@ class PlaywrightPageManager:
                     )
                     continue
             
-            logfire.warning("Failed to handle cookie consent with all selectors")
+            logfire.error("Failed to handle cookie consent with all selectors")
             
             # Take screenshot if all methods fail
             try:
                 screenshot_path = "cookie_banner_failed.png"
                 await self.page.screenshot(path=screenshot_path)
-                logfire.info(f"Saved screenshot to {screenshot_path}")
+              
             except Exception as e:
                 logfire.error("Failed to save screenshot", error=str(e))
             

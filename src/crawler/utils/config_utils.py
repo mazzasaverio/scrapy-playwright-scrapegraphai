@@ -18,7 +18,7 @@ def load_crawler_config() -> Dict[str, Any]:
         with open(config_path) as f:
             config = yaml.safe_load(f)
             
-        logfire.info("Crawler configuration loaded successfully")
+    
         return config
         
     except Exception as e:

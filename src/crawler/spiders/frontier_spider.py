@@ -10,7 +10,7 @@ from crawler.utils.crawl_manager_utils import CrawlManager
 from crawler.items import ConfigUrlLogItem, UrlItem
 from crawler.utils.playwright_utils import PlaywrightPageManager
 from crawler.utils.logging_utils import setup_logging
-
+setup_logging()
 class FrontierSpider(scrapy.Spider):
     name = "frontier_spider"
     
@@ -32,23 +32,20 @@ class FrontierSpider(scrapy.Spider):
             ],
         },
         "PLAYWRIGHT_BROWSER_TYPE": "chromium",
-        "LOG_LEVEL": "DEBUG",
+  
     }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        setup_logging()
         self.config = load_crawler_config()
      
     def start_requests(self):
         """Generate initial requests from config"""
-        logfire.info("Starting requests generation")
-        
+
         try:
             for category in self.config.get('categories', []):
                 category_name = category['name']
-                logfire.info(f"Processing category: {category_name}", category_name=category_name)
-                
+
                 for url_config in category.get('urls', []):
                     url = url_config['url']
                     url_type = url_config['type']
@@ -69,7 +66,6 @@ class FrontierSpider(scrapy.Spider):
                     
                     elif url_type in (1, 2):
                         # Type 1 and 2 require DOM manipulation, use Playwright
-                        logfire.info("Creating Playwright request", url=url, type=url_type)
                         yield scrapy.Request(
                             url=url,
                             callback=self.parse_with_playwright,
@@ -86,7 +82,7 @@ class FrontierSpider(scrapy.Spider):
                         )
                     else:
                         logfire.warning(f"Unsupported URL type: {url_type}", url=url)
-            logfire.info("Finished generating start requests")
+           
         except Exception as e:
             logfire.error(
                 "Error during start_requests",
@@ -166,13 +162,7 @@ class FrontierSpider(scrapy.Spider):
         seed_count = 0
         
         try:
-            logfire.info(
-                "Starting page processing",
-                url=response.url,
-                category=category,
-                depth=current_depth
-            )
-
+           
             # Create initial log entry
             if current_depth == 0:
                 yield ConfigUrlLogItem(
@@ -184,17 +174,11 @@ class FrontierSpider(scrapy.Spider):
                     target_patterns=url_config.get('target_patterns'),
                     seed_pattern=url_config.get('seed_pattern')
                 )
-                logfire.info(
-                    "Creating initial config log",
-                    url=response.url,
-                    category=category
-                )
 
             # Initialize page manager and process page
             page_manager = PlaywrightPageManager(page)
             await page_manager.initialize_page()
             
-            logfire.info("Getting page content", url=response.url)
             content = await page.content()
             base_url = page.url
             
@@ -204,7 +188,7 @@ class FrontierSpider(scrapy.Spider):
             found_links = [urljoin(base_url, href) for href in found_links if href]
             found_links = [link for link in found_links if is_valid_url(link)]
             
-            logfire.info(
+            logfire.debug(
                 "Found links",
                 url=response.url,
                 link_count=len(found_links)
@@ -246,13 +230,7 @@ class FrontierSpider(scrapy.Spider):
                             },
                             dont_filter=True
                         )
-            
-            logfire.info(
-                "Processed URLs",
-                url=response.url,
-                target_count=target_count,
-                seed_count=seed_count
-            )
+        
             
             # Update final status
             if current_depth == 0:

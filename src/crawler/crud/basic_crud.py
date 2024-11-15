@@ -329,7 +329,7 @@ class BaseCRUD:
             )
             
             count = len(result) if return_deleted and result else 0
-            logfire.info(
+            logfire.debug(
                 "Delete completed",
                 table=table,
                 records_deleted=count

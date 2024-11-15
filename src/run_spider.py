@@ -42,8 +42,8 @@ def main():
         # Initialize database
         db_manager.initialize()
         
-        # Configure logging
-        configure_logging()
+        # Configure logging without installing root handler
+        configure_logging(install_root_handler=False)
         
         # Get settings
         settings = get_project_settings()
@@ -66,10 +66,4 @@ def main():
 
 
 if __name__ == "__main__":
-    try:
         main()
-    except KeyboardInterrupt:
-        logfire.info("Crawler stopped by user")
-    except Exception as e:
-        logfire.error(f"Crawler failed: {e}")
-        raise

@@ -1,8 +1,8 @@
 # src/crawler/utils/crawl_manager.py
 
-from typing import Optional, List, Dict, Any
+from typing import  List, Dict, Any
 from crawler.utils.url_utils import matches_pattern, is_valid_url
-from crawler.items import UrlItem, ConfigUrlLogItem
+from crawler.items import UrlItem
 import logfire
 
 class CrawlManager:
@@ -44,7 +44,7 @@ class CrawlManager:
                 seed_count = len(seed_items)
 
             logfire.info(
-                f"Processed URLs",
+                f"Processed URLs at depth {current_depth}",
                 url_type=self.type,
                 target_count=target_count,
                 seed_count=seed_count

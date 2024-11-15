@@ -50,10 +50,26 @@ ROBOTSTXT_OBEY = False
 COOKIES_ENABLED = True
 TELNETCONSOLE_ENABLED = False
 # src/crawler/settings.py
+# Read LEVEL_DEEP_LOGGING from environment
+LEVEL_DEEP_LOGGING = os.getenv('LEVEL_DEEP_LOGGING', 'INFO').upper()
 
-LOG_ENABLED = True
-LOG_LEVEL = 'DEBUG'
+# Validate LEVEL_DEEP_LOGGING
+valid_levels = ['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG']
+if LEVEL_DEEP_LOGGING not in valid_levels:
+    LEVEL_DEEP_LOGGING = 'INFO'
 
+# Set Scrapy's log level
+LOG_LEVEL = LEVEL_DEEP_LOGGING
+
+# Disable Scrapy's built-in logging if LEVEL_DEEP_LOGGING is ERROR or INFO
+if LEVEL_DEEP_LOGGING in ['ERROR', 'INFO']:
+    LOG_ENABLED = False
+else:
+    LOG_ENABLED = True
+
+LOG_FORMAT = '%(asctime)s %(message)s'
+LOG_DATEFORMAT = '%Y-%m-%d %H:%M:%S'
+LOG_STDOUT = True  # Capture standard output
 # Export Settings
 REQUEST_FINGERPRINTER_IMPLEMENTATION = "2.7"
 FEED_EXPORT_ENCODING = "utf-8"
@@ -62,3 +78,5 @@ DOWNLOAD_DELAY = 2
 RANDOMIZE_DOWNLOAD_DELAY = True
 DOWNLOAD_TIMEOUT = 30
 PLAYWRIGHT_DEFAULT_NAVIGATION_TIMEOUT = 30000
+
+

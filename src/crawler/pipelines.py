@@ -90,7 +90,7 @@ class DatabasePipeline:
                 # Create URL in frontier
                 url_id = self.frontier_crud.create_url(frontier_url)
                 if url_id:
-                    logfire.info(
+                    logfire.debug(
                         "Created new frontier URL",
                         url=str(frontier_url.url),
                         category=frontier_url.category,

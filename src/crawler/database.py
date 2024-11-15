@@ -45,8 +45,7 @@ class DatabaseManager:
                 
             with open(queries_file) as f:
                 self.queries = aiosql.from_str(f.read(), "psycopg2")
-                
-            logfire.info("SQL files loaded successfully")
+           
             
         except Exception as e:
             logfire.error(f"Failed to load SQL files: {e}")
@@ -68,8 +67,7 @@ class DatabaseManager:
 
             # Create schema
             self._execute_schema_creation()
-            logfire.info("Database initialized successfully")
-
+         
         except PsycopgError as e:
             logfire.error(
                 "Database connection error",
@@ -101,8 +99,7 @@ class DatabaseManager:
                 # Create ENUMs and tables
                 cur.execute(self.schema_sql)
                 conn.commit()
-                logfire.info("Schema created successfully")
-                
+            
         except PsycopgError as e:
             conn.rollback()
             logfire.error(
@@ -169,10 +166,7 @@ class DatabaseManager:
             with conn.cursor() as cur:
                 execute_values(cur, query, params_list, page_size=page_size)
                 conn.commit()
-                logfire.info(
-                    "Batch execution completed",
-                    records_processed=len(params_list)
-                )
+      
                 
         except PsycopgError as e:
             conn.rollback()
@@ -205,7 +199,7 @@ class DatabaseManager:
         if self.pool:
             try:
                 self.pool.closeall()
-                logfire.info("Database connections closed")
+          
             except Exception as e:
                 logfire.error(f"Error closing database connections: {e}")
 
