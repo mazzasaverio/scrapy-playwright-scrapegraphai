@@ -1,5 +1,21 @@
 # Web Crawler with Scrapy and Playwright
 
+## Project Structure
+```
+├── LICENSE
+├── README.md
+├── config/
+│   ├── crawler_config.yaml
+│   └── settings.py
+├── infrastructure/
+│   ├── docker/
+│   └── terraform/
+├── src/
+│   ├── crawler/
+│   └── tools/
+└── pyproject.toml
+```
+
 ## Description
 This project implements a configurable web crawler using Scrapy and Playwright. It's designed to handle different types of URL crawling patterns and can store the results in a PostgreSQL database.
 
@@ -10,6 +26,35 @@ This project implements a configurable web crawler using Scrapy and Playwright. 
 - Configurable crawling patterns and depths
 - Docker support
 - Terraform infrastructure
+
+## Installation & Setup
+
+1. Install uv (if not already installed):
+```bash
+# On macOS and Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# On Windows
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+2. Create a virtual environment with Python 3.11:
+```bash
+uv venv --python=3.11
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+```
+
+3. Install dependencies:
+```bash
+# Install project dependencies from pyproject.toml
+uv pip sync
+```
+
+4. Configure environment variables:
+```bash
+cp env.example .env
+```
+Then edit `.env` with your specific configurations.
 
 ## Configuration
 The crawler behavior is configured through `config/crawler_config.yaml`. Each crawling target is defined by a category with the following structure:
@@ -68,24 +113,6 @@ categories:
 
 Running `python src/run_spider.py --url_seed_root_id 0` will only process the "Torino" category.
 
-## Environment Setup
-
-1. Create a virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-2. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-3. Configure environment variables by copying `env.example` to `.env` and filling in the values:
-```bash
-cp env.example .env
-```
-
 ## Docker Support
 To run using Docker:
 
@@ -111,4 +138,4 @@ The project uses logfire for structured logging. Log level can be configured thr
 5. Create a Pull Request
 
 ## License
-[License details here]
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
