@@ -55,15 +55,15 @@ class DatabasePipeline:
                 logfire.error("Failed to create/update log entry", url=url, category=category)
                 return
                 
-            # Update state if not pending
-            if status != 'pending':
-                self.config_crud.update_state(
-                    log_id=log_id,
-                    state=ConfigState(status),
-                    error_message=item.get('error_message'),
-                    target_count=item.get('target_count', 0),
-                    seed_count=item.get('seed_count', 0)
-                )
+            # # Update state if not pending
+            # if status != 'pending':
+            #     self.config_crud.update_state(
+            #         log_id=log_id,
+            #         state=ConfigState(status),
+            #         error_message=item.get('error_message'),
+            #         target_count=item.get('target_count', 0),
+            #         seed_count=item.get('seed_count', 0)
+            #     )
 
         except Exception as e:
             logfire.error(f"Error processing ConfigUrlLogItem: {e}", item=item)

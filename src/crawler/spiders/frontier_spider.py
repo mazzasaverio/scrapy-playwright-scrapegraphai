@@ -41,6 +41,7 @@ class FrontierSpider(scrapy.Spider):
         super().__init__(*args, **kwargs)
         self.config = load_crawler_config()
         self.url_seed_root_id = int(url_seed_root_id) if url_seed_root_id is not None else None
+        
         self.run_id = datetime.now().strftime('%Y%m%d_%H%M%S')  # Identificatore univoco per l'esecuzione
         logfire.info(f"Initialized spider", url_seed_root_id=self.url_seed_root_id)
      
@@ -48,16 +49,15 @@ class FrontierSpider(scrapy.Spider):
         """Generate initial requests from config"""
         try:
             for category in self.config.get('categories', []):
-                # Skip if url_seed_root_id doesn't match
-                if self.url_seed_root_id is not None and category.get('url_seed_root_id') != self.url_seed_root_id:
-                    continue
-
+             
                 category_name = category['name']
-                logfire.info(f"Processing category", 
-                           category=category_name, 
-                           url_seed_root_id=category.get('url_seed_root_id'))
+              
 
                 for url_config in category.get('urls', []):
+
+                    if self.url_seed_root_id is not None and url_config.get('url_seed_root_id') != self.url_seed_root_id:
+                        continue
+                     
                     url = url_config['url']
                     url_type = url_config['type']
                     
@@ -162,7 +162,7 @@ class FrontierSpider(scrapy.Spider):
         url_config = response.meta.get('url_config')
         current_depth = response.meta.get('depth', 0)
         parent_url = response.meta.get('parent_url')
-        
+    
         target_count = 0
         seed_count = 0
         target_urls = []

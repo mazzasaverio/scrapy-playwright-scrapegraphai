@@ -1,26 +1,5 @@
--- Drop tables if they exist
-DROP TABLE IF EXISTS frontier_url CASCADE;
-DROP TABLE IF EXISTS config_url_log CASCADE;
--- Drop types if they exist
-DROP TYPE IF EXISTS url_state_type;
-DROP TYPE IF EXISTS config_state_type;
--- Create ENUM types
-CREATE TYPE url_state_type AS ENUM (
-    'pending',
-    'processing',
-    'processed',
-    'failed',
-    'skipped'
-);
-CREATE TYPE config_state_type AS ENUM (
-    'pending',
-    'running',
-    'completed',
-    'failed',
-    'partially_completed'
-);
--- Create frontier_url table
-CREATE TABLE frontier_url (
+-- Create frontier_url table if it doesn't exist
+CREATE TABLE IF NOT EXISTS frontier_url (
     id BIGSERIAL PRIMARY KEY,
     url TEXT NOT NULL,
     category TEXT NOT NULL,
@@ -35,20 +14,29 @@ CREATE TABLE frontier_url (
     seed_pattern TEXT,
     is_target BOOLEAN NOT NULL DEFAULT false,
     parent_url TEXT,
-    url_state url_state_type NOT NULL DEFAULT 'pending',
+    -- Using TEXT instead of ENUM
+    url_state TEXT NOT NULL DEFAULT 'pending' CHECK (
+        url_state IN (
+            'pending',
+            'processing',
+            'processed',
+            'failed',
+            'skipped'
+        )
+    ),
     error_message TEXT,
     insert_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     last_update TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(url, category)
 );
--- Create indices for frontier_url
+-- Create indices for frontier_url if they don't exist
 CREATE INDEX IF NOT EXISTS idx_frontier_url_state ON frontier_url(url_state);
 CREATE INDEX IF NOT EXISTS idx_frontier_url_category ON frontier_url(category);
 CREATE INDEX IF NOT EXISTS idx_frontier_url_domain ON frontier_url(main_domain);
 CREATE INDEX IF NOT EXISTS idx_frontier_url_type ON frontier_url(url_type);
 CREATE INDEX IF NOT EXISTS idx_frontier_url_is_target ON frontier_url(is_target);
--- Create config_url_log table
-CREATE TABLE config_url_log (
+-- Create config_url_log table if it doesn't exist
+CREATE TABLE IF NOT EXISTS config_url_log (
     id BIGSERIAL PRIMARY KEY,
     url TEXT NOT NULL,
     category TEXT NOT NULL,
@@ -56,7 +44,16 @@ CREATE TABLE config_url_log (
         url_type >= 0
         AND url_type <= 4
     ),
-    config_state config_state_type NOT NULL DEFAULT 'pending',
+    -- Using TEXT instead of ENUM
+    config_state TEXT NOT NULL DEFAULT 'pending' CHECK (
+        config_state IN (
+            'pending',
+            'running',
+            'completed',
+            'failed',
+            'partially_completed'
+        )
+    ),
     -- Process tracking
     start_time TIMESTAMP WITH TIME ZONE,
     end_time TIMESTAMP WITH TIME ZONE,
@@ -81,26 +78,25 @@ CREATE TABLE config_url_log (
     metadata JSONB DEFAULT '{}'::jsonb,
     UNIQUE(url, category)
 );
--- Create indices for config_url_log
+-- Create indices for config_url_log if they don't exist
 CREATE INDEX IF NOT EXISTS idx_config_url_log_category ON config_url_log(category);
 CREATE INDEX IF NOT EXISTS idx_config_url_log_state ON config_url_log(config_state);
 CREATE INDEX IF NOT EXISTS idx_config_url_log_type ON config_url_log(url_type);
 CREATE INDEX IF NOT EXISTS idx_config_url_log_updated ON config_url_log(updated_at);
--- Create function to automatically update last_update column for frontier_url
+-- Create or replace function for updating last_update column
 CREATE OR REPLACE FUNCTION update_last_update_column() RETURNS TRIGGER AS $$ BEGIN NEW.last_update = CURRENT_TIMESTAMP;
 RETURN NEW;
 END;
 $$ LANGUAGE 'plpgsql';
--- Create function to automatically update updated_at column for config_url_log
+-- Create or replace function for updating updated_at column
 CREATE OR REPLACE FUNCTION update_updated_at_column() RETURNS TRIGGER AS $$ BEGIN NEW.updated_at = CURRENT_TIMESTAMP;
 RETURN NEW;
 END;
 $$ LANGUAGE 'plpgsql';
--- Add trigger to frontier_url
+-- Drop and recreate triggers to ensure they are up to date
 DROP TRIGGER IF EXISTS update_frontier_url_last_update ON frontier_url;
 CREATE TRIGGER update_frontier_url_last_update BEFORE
 UPDATE ON frontier_url FOR EACH ROW EXECUTE FUNCTION update_last_update_column();
--- Add trigger to config_url_log
 DROP TRIGGER IF EXISTS update_config_url_log_updated_at ON config_url_log;
 CREATE TRIGGER update_config_url_log_updated_at BEFORE
 UPDATE ON config_url_log FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -109,3 +105,11 @@ COMMENT ON TABLE frontier_url IS 'Stores URLs to be crawled and their metadata';
 COMMENT ON TABLE config_url_log IS 'Logs configuration and results of URL processing';
 COMMENT ON COLUMN frontier_url.url_state IS 'Current state of URL processing (pending, processing, processed, failed, skipped)';
 COMMENT ON COLUMN config_url_log.config_state IS 'Current state of configuration processing (pending, running, completed, failed, partially_completed)';
+-- Create schema version table if it doesn't exist
+CREATE TABLE IF NOT EXISTS schema_version (
+    version INTEGER PRIMARY KEY,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+-- Insert initial schema version if not exists
+INSERT INTO schema_version (version)
+VALUES (1) ON CONFLICT (version) DO NOTHING;

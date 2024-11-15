@@ -1,9 +1,9 @@
 categories:
-  - url_seed_root_id: 0
-    name: "Torino"
+  - name: "Torino"
     description: "Borse di studio e premi di laurea UniTo"
     urls:
-      - url: "https://pubblicazioni.unito.it/visualizzaperweb.php?tipo=25&p=y&C7=all&criterio35=A&criterio46=No"
+      - url_seed_root_id: 0
+        url: "https://pubblicazioni.unito.it/visualizzaperweb.php?tipo=25&p=y&C7=all&criterio35=A&criterio46=No"
         type: 1
         target_patterns:
           - ".*\\.pdf$"
@@ -12,11 +12,32 @@ categories:
         seed_pattern: null
         max_depth: 0
 
-  - url_seed_root_id: 1
-    name: "Bologna"
+  - name: "Bologna"
     description: "Borse di studio e premi di laurea UniBo"
     urls:
-      - url: "https://bandi.unibo.it/agevolazioni/borse?b_start:int=0"
+      - url_seed_root_id: 1
+        url: "https://bandi.unibo.it/agevolazioni/borse?b_start:int=0"
+        type: 2
+        target_patterns:
+          - ".pdf"
+        seed_pattern: "/s/abis1/" # Pattern più preciso
+        max_depth: 1
+      - url_seed_root_id: 2
+        url: "https://bandi.unibo.it/agevolazioni/borse?b_start:int=10"
+        type: 2
+        target_patterns:
+          - ".pdf"
+        seed_pattern: "/s/abis1/" # Pattern più preciso
+        max_depth: 1
+      - url_seed_root_id: 3
+        url: "https://bandi.unibo.it/agevolazioni/borse?b_start:int=20"
+        type: 2
+        target_patterns:
+          - ".pdf"
+        seed_pattern: "/s/abis1/" # Pattern più preciso
+        max_depth: 1
+      - url_seed_root_id: 4
+        url: "https://bandi.unibo.it/agevolazioni/premi-laurea"
         type: 2
         target_patterns:
           - ".pdf"
